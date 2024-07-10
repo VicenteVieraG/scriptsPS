@@ -30,7 +30,7 @@ param(
 # Resolve Body file path
 try {
     Write-Host "-- Looking for body text file..." -BackgroundColor Blue -ForegroundColor White;
-    [string]$Path = Resolve-Path -Path $body -ErrorAction Stop;
+    [string]$Path = $PSScriptRoot + "\" + $body;
     $body = Get-Content -Path $Path -Raw;
     Write-Host "-- File found at $Path" -BackgroundColor Blue -ForegroundColor White;
 }catch {

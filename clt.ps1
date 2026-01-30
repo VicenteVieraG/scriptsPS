@@ -22,9 +22,9 @@
 .INPUTS
     [string]
 .EXAMPLE
-    ./ctl.ps1 -AddModule MyModule
+    ./clt.ps1 -AddModule MyModule
 .EXAMPLE
-    ./ctl.ps1 -RemoveModule MyModule
+    ./clt.ps1 -RemoveModule MyModule
 #>
 [CmdletBinding(DefaultParameterSetName = "Add")]
 PARAM(
@@ -92,12 +92,42 @@ function Add-CMakeSubdirectory {
         [string]$ModuleName
     );
 
-    $content = Get-Content -Path $Path -Raw;
-    $line = "add_subdirectory($ModuleName)";
-    $needsLeadingNewline = $content.Length -gt 0 -and -not $content.EndsWith("`r`n");
-    $prefix = if ($needsLeadingNewline) { "`r`n" } else { "" };
+    [string]$content = Get-Content -Path $Path -Raw;
+    [string]$line = "add_subdirectory($ModuleName)";
+    [bool]$needsLeadingNewline = $content.Length -gt 0 -and -not $content.EndsWith("`r`n");
+    [string]$prefix = if ($needsLeadingNewline) { "`r`n" } else { "" };
 
     Add-Content -Path $Path -Value "$prefix$line`r`n";
+}
+
+function Add-CMakeLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Line
+    );
+
+    if (-not (Test-Path -Path $Path)) {
+        Write-ModuleError -ErrorMessage "Failed to update $Path." -DetailsMessage "File does not exist.";
+        return;
+    }
+
+    [string]$content = Get-Content -Path $Path -Raw;
+    [bool]$needsLeadingNewline = $content.Length -gt 0 -and -not $content.EndsWith("`r`n");
+    [string]$prefix = if ($needsLeadingNewline) { "`r`n" } else { "" };
+
+    Add-Content -Path $Path -Value "$prefix$Line`r`n";
+}
+
+function Add-ModuleCMakeContent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ModuleName
+    );
+
+    Add-CMakeLine -Path "src/$ModuleName/CMakeLists.txt" -Line "add_library($ModuleName STATIC $ModuleName.cpp)";
+    Add-CMakeLine -Path "include/$ModuleName/CMakeLists.txt" -Line "target_include_directories($ModuleName PUBLIC ./)";
 }
 
 function Remove-CMakeSubdirectory {
@@ -113,11 +143,11 @@ function Remove-CMakeSubdirectory {
         return;
     }
 
-    $content = Get-Content -Path $Path -Raw;
-    $endsWithNewline = $content.EndsWith("`r`n");
-    $escaped = [regex]::Escape($ModuleName);
-    $pattern = "(?m)^\s*add_subdirectory\(\s*$escaped\s*\)\s*(\r?\n)?";
-    $updated = [regex]::Replace($content, $pattern, "");
+    [string]$content = Get-Content -Path $Path -Raw;
+    [bool]$endsWithNewline = $content.EndsWith("`r`n");
+    [string]$escaped = [regex]::Escape($ModuleName);
+    [string]$pattern = "(?m)^\s*add_subdirectory\(\s*$escaped\s*\)\s*(\r?\n)?";
+    [string]$updated = [regex]::Replace($content, $pattern, "");
 
     if ($updated -ne $content) {
         if ($endsWithNewline -and -not $updated.EndsWith("`r`n")) {
@@ -150,6 +180,9 @@ function Add-Module {
         @{ Name = "CMakeLists.txt"; Path = "include/$ModuleName"; Type = "File" }
     );
     Write-Host "Created CMakeLists.txt files for module: '$ModuleName'." -ForegroundColor Green;
+
+    Add-ModuleCMakeContent -ModuleName $ModuleName;
+    Write-Host "Added module content to CMakeLists.txt files for module: '$ModuleName'." -ForegroundColor Green;
 
     Add-CMakeSubdirectory -Path "src/CMakeLists.txt" -ModuleName $ModuleName;
     Add-CMakeSubdirectory -Path "include/CMakeLists.txt" -ModuleName $ModuleName;
